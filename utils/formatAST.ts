@@ -1,32 +1,32 @@
-export function formatAST(node: any, indent = 0): string {
-    if (!node || typeof node !== "object") return "";
+export function convertASTToHierarchy(node: any): any {
+    if (!node || typeof node !== "object") return null;
   
-    // Create indentation
-    const indentation = "  ".repeat(indent);
+    // Convert AST node to hierarchical format
+    let treeNode: any = {
+      name: node.type,
+      children: [],
+    };
   
-    // Start building the tree
-    let result = `${indentation}${node.type}`;
-  
-    // If it's an identifier or literal, include its value
+    // If it's an identifier or literal, add value
     if (node.type === "Identifier") {
-      result += ` (${node.name})`;
+      treeNode.name += ` (${node.name})`;
     } else if (node.type === "Literal") {
-      result += ` (${node.value})`;
-    } else if (node.type === "VariableDeclaration") {
-      result += ` (${node.kind})`;
+      treeNode.name += ` (${node.value})`;
     }
   
-    // Process child nodes recursively
+    // Recursively process child nodes
     for (const key in node) {
       if (Array.isArray(node[key])) {
         node[key].forEach((child) => {
-          result += `\n${formatAST(child, indent + 1)}`;
+          let childNode = convertASTToHierarchy(child);
+          if (childNode) treeNode.children.push(childNode);
         });
       } else if (typeof node[key] === "object" && node[key] !== null) {
-        result += `\n${formatAST(node[key], indent + 1)}`;
+        let childNode = convertASTToHierarchy(node[key]);
+        if (childNode) treeNode.children.push(childNode);
       }
     }
   
-    return result;
+    return treeNode;
   }
   
