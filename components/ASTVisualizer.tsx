@@ -31,8 +31,8 @@ export default function ASTVisualizer({ data, onNodeClick }: ASTVisualizerProps)
     // Create a D3 hierarchy
     const root = d3.hierarchy(data);
 
-    // Create a tree layout
-    const treeLayout = d3.tree().size([width - 50, height - 50]);
+    // Create a tree layout with increased node spacing
+    const treeLayout = d3.tree().nodeSize([40, 200]); // 40px vertical, 200px horizontal spacing
     treeLayout(root);
 
     // Create an SVG container
@@ -51,33 +51,35 @@ export default function ASTVisualizer({ data, onNodeClick }: ASTVisualizerProps)
       .attr("stroke", "#555")
       .attr("stroke-width", 1.5)
       .attr("d", d3.linkHorizontal()
-        .x(d => (d as any).y)
-        .y(d => (d as any).x));
+        .x(d => d.y) // Horizontal position
+        .y(d => d.x)); // Vertical position
 
-        const nodes = svg.selectAll("g.node")
-        .data(root.descendants())
-        .enter()
-        .append("g")
-        .attr("transform", d => `translate(${d.y},${d.x})`)
-        .on("click", (event, d) => onNodeClick?.(d.data.start, d.data.end));
-      
-      // Apply animation
-      nodes.transition().duration(500)
-        .style("opacity", 1);
-      
-      // Add circles for nodes
-      nodes.append("circle")
-        .attr("r", 6)
-        .attr("fill", "#007BFF");
-      
-      // Add labels
-      nodes.append("text")
-        .attr("dy", 3)
-        .attr("x", d => d.children ? -10 : 10)
-        .style("text-anchor", d => d.children ? "end" : "start")
-        .text(d => d.data.name);
-      
-  }, [data]);
+    // Create nodes
+    const nodes = svg.selectAll("g.node")
+      .data(root.descendants())
+      .enter()
+      .append("g")
+      .attr("transform", d => `translate(${d.y},${d.x})`)
+      .on("click", (event, d) => onNodeClick?.(d.data.start, d.data.end));
+
+    // Apply animation
+    nodes.transition().duration(500)
+      .style("opacity", 1);
+
+    // Add circles for nodes
+    nodes.append("circle")
+      .attr("r", 6)
+      .attr("fill", "#007BFF");
+
+    // Add labels with smaller font and adjusted offset
+    nodes.append("text")
+      .attr("dy", 3)
+      .attr("x", d => d.children ? -15 : 15) // Increased offset for better spacing
+      .style("text-anchor", d => d.children ? "end" : "start")
+      .style("font-size", "10px") // Reduced font size
+      .text(d => d.data.name);
+
+  }, [data, onNodeClick]); // Added onNodeClick to dependency array
 
   return <svg ref={svgRef} className="border rounded-lg bg-white shadow-lg" />;
 }
