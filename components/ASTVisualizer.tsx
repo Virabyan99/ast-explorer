@@ -5,9 +5,10 @@ import { useEffect, useRef } from "react";
 
 interface ASTVisualizerProps {
   data: any;
+  onNodeClick: (start: number, end: number) => void;
 }
 
-export default function ASTVisualizer({ data }: ASTVisualizerProps) {
+export default function ASTVisualizer({ data, onNodeClick }: ASTVisualizerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -19,7 +20,7 @@ export default function ASTVisualizer({ data }: ASTVisualizerProps) {
     // Clear previous SVG content
     d3.select(svgRef.current).selectAll("*").remove();
 
-    // Create a D3 hierarchy from the data
+    // Create a D3 hierarchy
     const root = d3.hierarchy(data);
 
     // Create a tree layout
@@ -50,11 +51,12 @@ export default function ASTVisualizer({ data }: ASTVisualizerProps) {
       .data(root.descendants())
       .enter()
       .append("g")
-      .attr("transform", d => `translate(${d.y},${d.x})`);
+      .attr("transform", d => `translate(${d.y},${d.x})`)
+      .on("click", (event, d) => onNodeClick(d.data.start, d.data.end)); // Handle click event
 
     // Add circles for nodes
     nodes.append("circle")
-      .attr("r", 5)
+      .attr("r", 6)
       .attr("fill", "#007BFF");
 
     // Add labels

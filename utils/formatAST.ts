@@ -4,10 +4,12 @@ export function convertASTToHierarchy(node: any): any {
     // Convert AST node to hierarchical format
     let treeNode: any = {
       name: node.type,
+      start: node.start || 0, // Store position data
+      end: node.end || 0,
       children: [],
     };
   
-    // If it's an identifier or literal, add value
+    // If it's an identifier or literal, include its value
     if (node.type === "Identifier") {
       treeNode.name += ` (${node.name})`;
     } else if (node.type === "Literal") {
