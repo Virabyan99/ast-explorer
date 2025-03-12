@@ -4,23 +4,25 @@ import { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import * as acorn from "acorn";
+import { formatAST } from "@/utils/formatAST";
 
 export default function CodeEditor() {
-  // Store code input & AST output
+  // Store code input, AST JSON, and formatted AST
   const [code, setCode] = useState("// Write JavaScript here...");
   const [ast, setAst] = useState({});
+  const [formattedAst, setFormattedAst] = useState("");
 
-  // Function to parse code into AST
+  // Function to parse JavaScript into AST and format it
   const handleCodeChange = (value: string) => {
     setCode(value);
 
     try {
-      const parsedAst = acorn.parse(value, {
-        ecmaVersion: 2020, // Support ES6+ syntax
-      });
+      const parsedAst = acorn.parse(value, { ecmaVersion: 2020 });
       setAst(parsedAst);
+      setFormattedAst(formatAST(parsedAst)); // Format AST as a tree
     } catch (error) {
       setAst({ error: "Invalid JavaScript syntax" });
+      setFormattedAst("Invalid JavaScript syntax.");
     }
   };
 
@@ -34,9 +36,10 @@ export default function CodeEditor() {
         onChange={handleCodeChange}
         className="border rounded-lg"
       />
-      <h2 className="text-lg font-semibold mt-4">AST Output (JSON)</h2>
+
+      <h2 className="text-lg font-semibold mt-4">Formatted AST</h2>
       <pre className="bg-gray-200 p-2 rounded text-sm overflow-auto h-60">
-        {JSON.stringify(ast, null, 2)}
+        {formattedAst}
       </pre>
     </div>
   );
