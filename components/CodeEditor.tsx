@@ -7,7 +7,7 @@ import * as acorn from 'acorn'
 import { convertASTToHierarchy } from '@/utils/formatAST'
 import ASTVisualizer from '@/components/ASTVisualizer'
 import { toast } from 'react-toastify'
-import { IconCheck, IconAlertTriangle, IconTrash } from '@tabler/icons-react'
+import { IconCheck, IconAlertTriangle, IconTrash, IconRun } from '@tabler/icons-react'
 import { useHistoryStore } from '@/store/useHistoryStore'
 import { debounce } from 'lodash'
 import { loadCurrentCode, saveCurrentCode } from '@/utils/indexedDB' // Adjust the import path
@@ -24,12 +24,24 @@ export default function CodeEditor() {
     });
   }, 1000)).current;
 
+  // Debounced parsing for AST visualization
+  const debouncedParseCode = useRef(debounce((value: string) => {
+    try {
+      const parsedAst = acorn.parse(value, { ecmaVersion: 2020 })
+      const hierarchy = convertASTToHierarchy(parsedAst)
+      setAst(hierarchy)
+    } catch (error) {
+      setAst(null) // No toast here to avoid real-time interruptions
+    }
+  }, 500)).current;
+
   // Load current code and history on mount
   useEffect(() => {
     const init = async () => {
       try {
         const savedCode = await loadCurrentCode();
         setCode(savedCode);
+        debouncedParseCode(savedCode); // Parse initially loaded code
       } catch (error) {
         console.error('Failed to load current code:', error);
         setCode('// Write JavaScript here...');
@@ -44,23 +56,32 @@ export default function CodeEditor() {
     debouncedSaveCurrentCode(code);
   }, [code]);
 
-  // Parse JavaScript and convert to AST
+  // Handle code changes with debounced parsing
   const handleCodeChange = (value: string) => {
     setCode(value)
+    debouncedParseCode(value); // Trigger debounced parsing
+  }
+
+  // Validate code and show toast feedback
+  const validateCode = () => {
     try {
-      const parsedAst = acorn.parse(value, { ecmaVersion: 2020 })
-      const hierarchy = convertASTToHierarchy(parsedAst)
-      setAst(hierarchy)
+      acorn.parse(code, { ecmaVersion: 2020 });
+      toast.success('Code is valid!');
     } catch (error) {
-      setAst(null)
-      toast.error('Syntax Error: Invalid JavaScript!')
+      toast.error('Syntax Error: Invalid JavaScript!');
     }
   }
 
-  // Save the current AST
+  // Save the current AST after validating
   const handleSave = () => {
-    saveHistory(code, ast)
-    toast.success('Saved successfully!')
+    try {
+      const parsedAst = acorn.parse(code, { ecmaVersion: 2020 });
+      const hierarchy = convertASTToHierarchy(parsedAst);
+      saveHistory(code, hierarchy);
+      toast.success('Saved successfully!');
+    } catch (error) {
+      toast.error('Cannot save: Invalid JavaScript!');
+    }
   }
 
   return (
@@ -78,12 +99,20 @@ export default function CodeEditor() {
         className="border rounded-lg"
       />
 
-      <button
-        onClick={handleSave}
-        className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2">
-        <IconCheck />
-        Save Snapshot
-      </button>
+      <div className="flex gap-2 mt-2">
+        <button
+          onClick={validateCode}
+          className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2">
+          <IconRun />
+          Run
+        </button>
+        <button
+          onClick={handleSave}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2">
+          <IconCheck />
+          Save Snapshot
+        </button>
+      </div>
 
       <h2 className="text-lg font-semibold mt-4 flex items-center gap-2">
         <IconAlertTriangle className="text-yellow-600" />
