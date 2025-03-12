@@ -54,25 +54,29 @@ export default function ASTVisualizer({ data, onNodeClick }: ASTVisualizerProps)
         .x(d => (d as any).y)
         .y(d => (d as any).x));
 
-    // Create nodes
-    const nodes = svg.selectAll("g.node")
-      .data(root.descendants())
-      .enter()
-      .append("g")
-      .attr("transform", d => `translate(${d.y},${d.x})`)
-      .on("click", (event, d) => onNodeClick?.(d.data.start, d.data.end)); // Handle click event
-
-    // Add circles for nodes
-    nodes.append("circle")
-      .attr("r", 6)
-      .attr("fill", "#007BFF");
-
-    // Add labels
-    nodes.append("text")
-      .attr("dy", 3)
-      .attr("x", d => d.children ? -10 : 10)
-      .style("text-anchor", d => d.children ? "end" : "start")
-      .text(d => d.data.name);
+        const nodes = svg.selectAll("g.node")
+        .data(root.descendants())
+        .enter()
+        .append("g")
+        .attr("transform", d => `translate(${d.y},${d.x})`)
+        .on("click", (event, d) => onNodeClick?.(d.data.start, d.data.end));
+      
+      // Apply animation
+      nodes.transition().duration(500)
+        .style("opacity", 1);
+      
+      // Add circles for nodes
+      nodes.append("circle")
+        .attr("r", 6)
+        .attr("fill", "#007BFF");
+      
+      // Add labels
+      nodes.append("text")
+        .attr("dy", 3)
+        .attr("x", d => d.children ? -10 : 10)
+        .style("text-anchor", d => d.children ? "end" : "start")
+        .text(d => d.data.name);
+      
   }, [data]);
 
   return <svg ref={svgRef} className="border rounded-lg bg-white shadow-lg" />;
