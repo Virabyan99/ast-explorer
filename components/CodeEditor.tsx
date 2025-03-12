@@ -1,88 +1,113 @@
-'use client'
+"use client";
 
-import { useState, useEffect, useRef } from 'react'
-import CodeMirror from '@uiw/react-codemirror'
-import { javascript } from '@codemirror/lang-javascript'
-import * as acorn from 'acorn'
-import { convertASTToHierarchy } from '@/utils/formatAST'
-import ASTVisualizer from '@/components/ASTVisualizer'
-import { toast } from 'react-toastify'
-import { IconCheck, IconAlertTriangle, IconTrash, IconRun } from '@tabler/icons-react'
-import { useHistoryStore } from '@/store/useHistoryStore'
-import { debounce } from 'lodash'
-import { loadCurrentCode, saveCurrentCode } from '@/utils/indexedDB' // Adjust the import path
+import { useState, useEffect, useRef } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { javascript } from "@codemirror/lang-javascript";
+import * as acorn from "acorn";
+import { convertASTToHierarchy } from "@/utils/formatAST";
+import ASTVisualizer from "@/components/ASTVisualizer";
+import { toast } from "react-toastify";
+import { IconCheck, IconAlertTriangle, IconTrash } from "@tabler/icons-react";
+import { useHistoryStore } from "@/store/useHistoryStore";
+import { debounce } from "lodash";
+import { loadCurrentCode, saveCurrentCode } from "@/utils/indexedDB";
+import { EditorView, Decoration } from "@codemirror/view";
+import { StateField, StateEffect } from "@codemirror/state";
+
+// Define state field and effect for managing highlights
+const highlightField = StateField.define<{ from: number; to: number } | null>({
+  create: () => null,
+  update: (value, tr) => {
+    for (let e of tr.effects) {
+      if (e.is(setHighlight)) return e.value;
+    }
+    return value;
+  },
+  provide: (f) =>
+    EditorView.decorations.from(f, (range) => {
+      if (range) {
+        return Decoration.set([
+          Decoration.mark({
+            attributes: { style: "background-color: yellow" },
+          }).range(range.from, range.to),
+        ]);
+      }
+      return Decoration.none;
+    }),
+});
+
+const setHighlight = StateEffect.define<{ from: number; to: number } | null>();
 
 export default function CodeEditor() {
-  const [code, setCode] = useState('')
-  const [ast, setAst] = useState<any>(null)
-  const { history, loadHistory, saveHistory, deleteHistory } = useHistoryStore()
+  const [code, setCode] = useState("");
+  const [ast, setAst] = useState<any>(null);
+  const { history, loadHistory, saveHistory, deleteHistory } = useHistoryStore();
+  const editorRef = useRef<any>(null);
 
   // Debounced save function for current code
-  const debouncedSaveCurrentCode = useRef(debounce((code: string) => {
-    saveCurrentCode(code).catch(error => {
-      console.error('Failed to save current code:', error);
-    });
-  }, 1000)).current;
+  const debouncedSaveCurrentCode = useRef(
+    debounce((code: string) => {
+      saveCurrentCode(code).catch((error) => {
+        console.error("Failed to save current code:", error);
+      });
+    }, 1000)
+  ).current;
 
-  // Debounced parsing for AST visualization
-  const debouncedParseCode = useRef(debounce((value: string) => {
-    try {
-      const parsedAst = acorn.parse(value, { ecmaVersion: 2020 })
-      const hierarchy = convertASTToHierarchy(parsedAst)
-      setAst(hierarchy)
-    } catch (error) {
-      setAst(null) // No toast here to avoid real-time interruptions
-    }
-  }, 500)).current;
-
-  // Load current code and history on mount
+  // Load initial code and history
   useEffect(() => {
     const init = async () => {
       try {
         const savedCode = await loadCurrentCode();
         setCode(savedCode);
-        debouncedParseCode(savedCode); // Parse initially loaded code
       } catch (error) {
-        console.error('Failed to load current code:', error);
-        setCode('// Write JavaScript here...');
+        console.error("Failed to load current code:", error);
+        setCode("// Write JavaScript here...");
       }
       loadHistory();
     };
     init();
   }, []);
 
-  // Save current code whenever it changes
+  // Save code to IndexedDB on change
   useEffect(() => {
     debouncedSaveCurrentCode(code);
   }, [code]);
 
-  // Handle code changes with debounced parsing
+  // Handle code changes and update AST
   const handleCodeChange = (value: string) => {
-    setCode(value)
-    debouncedParseCode(value); // Trigger debounced parsing
-  }
-
-  // Validate code and show toast feedback
-  const validateCode = () => {
+    setCode(value);
     try {
-      acorn.parse(code, { ecmaVersion: 2020 });
-      toast.success('Code is valid!');
-    } catch (error) {
-      toast.error('Syntax Error: Invalid JavaScript!');
-    }
-  }
-
-  // Save the current AST after validating
-  const handleSave = () => {
-    try {
-      const parsedAst = acorn.parse(code, { ecmaVersion: 2020 });
+      const parsedAst = acorn.parse(value, { ecmaVersion: 2020 });
       const hierarchy = convertASTToHierarchy(parsedAst);
-      saveHistory(code, hierarchy);
-      toast.success('Saved successfully!');
+      setAst(hierarchy);
     } catch (error) {
-      toast.error('Cannot save: Invalid JavaScript!');
+      setAst(null);
+      toast.error("Syntax Error: Invalid JavaScript!");
     }
-  }
+    // Clear highlight when code changes
+    if (editorRef.current) {
+      const view = editorRef.current.view;
+      if (view) {
+        view.dispatch({ effects: setHighlight.of(null) });
+      }
+    }
+  };
+
+  // Save current code and AST to history
+  const handleSave = () => {
+    saveHistory(code, ast);
+    toast.success("Saved successfully!");
+  };
+
+  // Highlight code range when a node is clicked
+  const handleNodeClick = (start: number, end: number) => {
+    if (!editorRef.current) return;
+    const view = editorRef.current.view;
+    if (!view) return;
+    view.dispatch({
+      effects: setHighlight.of({ from: start, to: end }),
+    });
+  };
 
   return (
     <div className="w-full max-w-2xl mx-auto mt-10 p-4 border rounded-lg bg-white shadow">
@@ -94,25 +119,19 @@ export default function CodeEditor() {
       <CodeMirror
         value={code}
         height="300px"
-        extensions={[javascript()]}
+        extensions={[javascript(), highlightField]}
         onChange={handleCodeChange}
+        ref={editorRef}
         className="border rounded-lg"
       />
 
-      <div className="flex gap-2 mt-2">
-        <button
-          onClick={validateCode}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2">
-          <IconRun />
-          Run
-        </button>
-        <button
-          onClick={handleSave}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2">
-          <IconCheck />
-          Save Snapshot
-        </button>
-      </div>
+      <button
+        onClick={handleSave}
+        className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2"
+      >
+        <IconCheck />
+        Save Snapshot
+      </button>
 
       <h2 className="text-lg font-semibold mt-4 flex items-center gap-2">
         <IconAlertTriangle className="text-yellow-600" />
@@ -120,7 +139,7 @@ export default function CodeEditor() {
       </h2>
       <div className="border p-4 bg-gray-100 rounded-lg">
         {ast ? (
-          <ASTVisualizer data={ast} />
+          <ASTVisualizer data={ast} onNodeClick={handleNodeClick} />
         ) : (
           <p className="text-red-600">No valid AST generated.</p>
         )}
@@ -132,21 +151,21 @@ export default function CodeEditor() {
       </h2>
       <ul className="border p-2 rounded-lg bg-gray-200 max-h-40 overflow-auto">
         {history.map((item) => (
-          <li
-            key={item.id}
-            className="flex justify-between items-center p-2 border-b">
+          <li key={item.id} className="flex justify-between items-center p-2 border-b">
             <button
               onClick={() => {
-                setCode(item.key)
-                setAst(item.value)
+                setCode(item.key);
+                setAst(item.value);
               }}
-              className="px-2 py-1 bg-green-600 text-white rounded flex items-center gap-2">
+              className="px-2 py-1 bg-green-600 text-white rounded flex items-center gap-2"
+            >
               <IconCheck />
               Load
             </button>
             <button
               onClick={() => deleteHistory(item.id!)}
-              className="px-2 py-1 bg-red-600 text-white rounded flex items-center gap-2">
+              className="px-2 py-1 bg-red-600 text-white rounded flex items-center gap-2"
+            >
               <IconTrash />
               Delete
             </button>
@@ -154,5 +173,5 @@ export default function CodeEditor() {
         ))}
       </ul>
     </div>
-  )
+  );
 }
