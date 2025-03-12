@@ -7,7 +7,7 @@ import * as acorn from "acorn";
 import { convertASTToHierarchy } from "@/utils/formatAST";
 import ASTVisualizer from "@/components/ASTVisualizer";
 import { toast } from "react-toastify";
-import { IconCheck, IconAlertTriangle, IconTrash } from "@tabler/icons-react";
+import { IconCheck, IconAlertTriangle, IconTrash, IconRun } from "@tabler/icons-react";
 import { useHistoryStore } from "@/store/useHistoryStore";
 import { debounce } from "lodash";
 import { loadCurrentCode, saveCurrentCode } from "@/utils/indexedDB";
@@ -42,7 +42,7 @@ export default function CodeEditor() {
   const [code, setCode] = useState("");
   const [ast, setAst] = useState<any>(null);
   const { history, loadHistory, saveHistory, deleteHistory } = useHistoryStore();
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<any>(null); // Ref to access CodeMirror instance
 
   // Debounced save function for current code
   const debouncedSaveCurrentCode = useRef(
@@ -53,12 +53,26 @@ export default function CodeEditor() {
     }, 1000)
   ).current;
 
-  // Load initial code and history
+  // Debounced parsing for AST visualization
+  const debouncedParseCode = useRef(
+    debounce((value: string) => {
+      try {
+        const parsedAst = acorn.parse(value, { ecmaVersion: 2020 });
+        const hierarchy = convertASTToHierarchy(parsedAst);
+        setAst(hierarchy);
+      } catch (error) {
+        setAst(null); // No toast here to avoid real-time interruptions
+      }
+    }, 500)
+  ).current;
+
+  // Load current code and history on mount
   useEffect(() => {
     const init = async () => {
       try {
         const savedCode = await loadCurrentCode();
         setCode(savedCode);
+        debouncedParseCode(savedCode); // Parse initially loaded code
       } catch (error) {
         console.error("Failed to load current code:", error);
         setCode("// Write JavaScript here...");
@@ -68,22 +82,15 @@ export default function CodeEditor() {
     init();
   }, []);
 
-  // Save code to IndexedDB on change
+  // Save current code whenever it changes
   useEffect(() => {
     debouncedSaveCurrentCode(code);
   }, [code]);
 
-  // Handle code changes and update AST
+  // Handle code changes with debounced parsing
   const handleCodeChange = (value: string) => {
     setCode(value);
-    try {
-      const parsedAst = acorn.parse(value, { ecmaVersion: 2020 });
-      const hierarchy = convertASTToHierarchy(parsedAst);
-      setAst(hierarchy);
-    } catch (error) {
-      setAst(null);
-      toast.error("Syntax Error: Invalid JavaScript!");
-    }
+    debouncedParseCode(value); // Trigger debounced parsing
     // Clear highlight when code changes
     if (editorRef.current) {
       const view = editorRef.current.view;
@@ -93,10 +100,26 @@ export default function CodeEditor() {
     }
   };
 
-  // Save current code and AST to history
+  // Validate code and show toast feedback
+  const validateCode = () => {
+    try {
+      acorn.parse(code, { ecmaVersion: 2020 });
+      toast.success("Code is valid!");
+    } catch (error) {
+      toast.error("Syntax Error: Invalid JavaScript!");
+    }
+  };
+
+  // Save the current AST after validating
   const handleSave = () => {
-    saveHistory(code, ast);
-    toast.success("Saved successfully!");
+    try {
+      const parsedAst = acorn.parse(code, { ecmaVersion: 2020 });
+      const hierarchy = convertASTToHierarchy(parsedAst);
+      saveHistory(code, hierarchy);
+      toast.success("Saved successfully!");
+    } catch (error) {
+      toast.error("Cannot save: Invalid JavaScript!");
+    }
   };
 
   // Highlight code range when a node is clicked
@@ -119,19 +142,28 @@ export default function CodeEditor() {
       <CodeMirror
         value={code}
         height="300px"
-        extensions={[javascript(), highlightField]}
+        extensions={[javascript(), highlightField]} // Include highlight field
         onChange={handleCodeChange}
-        ref={editorRef}
+        ref={editorRef} // Attach ref to access editor instance
         className="border rounded-lg"
       />
 
-      <button
-        onClick={handleSave}
-        className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2"
-      >
-        <IconCheck />
-        Save Snapshot
-      </button>
+      <div className="flex gap-2 mt-2">
+        <button
+          onClick={validateCode}
+          className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center gap-2"
+        >
+          <IconRun />
+          Run
+        </button>
+        <button
+          onClick={handleSave}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2"
+        >
+          <IconCheck />
+          Save Snapshot
+        </button>
+      </div>
 
       <h2 className="text-lg font-semibold mt-4 flex items-center gap-2">
         <IconAlertTriangle className="text-yellow-600" />
@@ -139,7 +171,7 @@ export default function CodeEditor() {
       </h2>
       <div className="border p-4 bg-gray-100 rounded-lg">
         {ast ? (
-          <ASTVisualizer data={ast} onNodeClick={handleNodeClick} />
+          <ASTVisualizer data={ast} onNodeClick={handleNodeClick} /> // Pass onNodeClick
         ) : (
           <p className="text-red-600">No valid AST generated.</p>
         )}
