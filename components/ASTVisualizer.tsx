@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 
 interface ASTVisualizerProps {
   data: any;
-  onNodeClick: (start: number, end: number) => void;
+  onNodeClick?: (start: number, end: number) => void;
 }
 
 export default function ASTVisualizer({ data, onNodeClick }: ASTVisualizerProps) {
@@ -19,6 +19,14 @@ export default function ASTVisualizer({ data, onNodeClick }: ASTVisualizerProps)
 
     // Clear previous SVG content
     d3.select(svgRef.current).selectAll("*").remove();
+
+    // Create zoom behavior
+    const zoom = d3.zoom().scaleExtent([0.5, 2]).on("zoom", (event) => {
+      d3.select(svgRef.current).select("g").attr("transform", event.transform);
+    });
+
+    // Apply zoom to SVG
+    d3.select(svgRef.current).call(zoom);
 
     // Create a D3 hierarchy
     const root = d3.hierarchy(data);
@@ -52,7 +60,7 @@ export default function ASTVisualizer({ data, onNodeClick }: ASTVisualizerProps)
       .enter()
       .append("g")
       .attr("transform", d => `translate(${d.y},${d.x})`)
-      .on("click", (event, d) => onNodeClick(d.data.start, d.data.end)); // Handle click event
+      .on("click", (event, d) => onNodeClick?.(d.data.start, d.data.end)); // Handle click event
 
     // Add circles for nodes
     nodes.append("circle")
@@ -67,5 +75,5 @@ export default function ASTVisualizer({ data, onNodeClick }: ASTVisualizerProps)
       .text(d => d.data.name);
   }, [data]);
 
-  return <svg ref={svgRef} />;
+  return <svg ref={svgRef} className="border rounded-lg bg-white shadow-lg" />;
 }
